@@ -1,9 +1,15 @@
 #include <iostream>
 #include <stdio.h>
 #include <utility>
-#include <variant>
 #include <string>
 #include <fstream>
+#include <unordered_map>
+#include <vector>
+#include <cstring>
+#include <cctype>
+#include <variant>
+
+
 using namespace std;
 
 
@@ -14,7 +20,6 @@ enum Label {
 	float_const,
 };
 
-using Content = variant<int,double,string>;
 enum EntryType {INTEGER,FLOATING};
 struct TableEntry {
 	bool is_identifier;
@@ -27,12 +32,14 @@ unordered_map<string, TableEntry> lookupTable;
 
 
 struct MkSnode {
-	Label kind;
-	Content content;
+	Label label;
+	EntryType actualType;
+	EntryType computedType;
+	string content;
 	MkSnode* left_child;
 	MkSnode* right_child;
-	MkSnode(const Label lb, Content cn, MkSnode* left, MkSnode* right)
-		: kind(lb), content(std::move(cn)), left_child(left), right_child(right) {}
+	MkSnode(const Label lb, string cn, MkSnode* left, MkSnode* right)
+		: label(lb), content(std::move(cn)), left_child(left), right_child(right) {}
 };
 
 /* Global declarations */
@@ -90,7 +97,7 @@ MkSnode* error();
 int main() {
 	string testCases[4] = {"front.in1","front.in2","front.in3","front.in4"};
 
-	for (auto test: testCases) {
+	for (const auto& test: testCases) {
 		TableEntry intEntry;
 		TableEntry floatEntry;
 		floatEntry.is_identifier = false;
@@ -313,29 +320,45 @@ TableEntry declare(bool isInt) {
 	}
 	return ret;
 }
-/*struct MkSnode {
-	Label kind;
-	Content content;
-	MkSnode* left_child;
-	MkSnode* right_child;
-	MkSnode(const Label lb, Content cn, MkSnode* left, MkSnode* right)
-		: kind(lb), content(std::move(cn)), left_child(left), right_child(right) {}
-};*/
-void printContent(const Content& c) {
-	std::visit([](auto&& val) {
-		std::cout << val;
-	}, c);
+
+
+MkSnode* actualType(MkSnode* root) {
+	if (!root) return nullptr;
+	if (!root->right_child && !root->left_child) {
+		if (root-> label == identifier) {
+			const auto& entry = lookupTable[root->content];
+			root-> actualType = entry.type;
+			return root;
+		}
+		if (root-> label == float_const) {
+			root-> actualType = FLOATING;
+			return root;
+		}
+		if (root-> label == int_const) {
+			root-> actualType = INTEGER;
+			return root;
+		}
+	}
+	MkSnode* lChild = actualType(root->left_child);
+	MkSnode* rChild = actualType(root->right_child);
+	if (!lChild && !rChild) return nullptr;
+
+	if (root->content == "=") {
+		root-> actualType = rChild->actualType;
+		return root;
+	}
+	if (rChild-> actualType == FLOATING || lChild-> actualType == FLOATING) {
+		root-> actualType = FLOATING;
+		return root;
+	}
+	root->actualType = INTEGER;
+	return root;
 }
 
-void search(MkSnode* root) {
-	if (root == nullptr) return;
-	const MkSnode curr = *root;
-	printContent(curr.content);
-	cout<<" "<<curr.kind;
-	search(root->left_child);
-	search(root->right_child);
-}
+MkSnode* computedTypes(MkSnode* root) {
 
+	return root;
+}
 
 MkSnode* assign_list() {
 	vector<MkSnode*> chain;
@@ -360,7 +383,7 @@ MkSnode* assign_list() {
 	for (int i=chain.size()-1; i>=0; i--) {
 		rhs = new  MkSnode(op,"=", chain[i],rhs);
 	}
-	search(rhs);
+	MkSnode* actualTypedTree = actualType(rhs);
 	return rhs;
 }
 
@@ -477,4 +500,8 @@ MkSnode* factor() {
 MkSnode* error() {
 	cout<<"Error\n";
 	return nullptr;
+}
+
+void print(unordered_map<string, TableEntry> table) {
+
 }
