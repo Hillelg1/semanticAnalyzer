@@ -384,7 +384,7 @@ MkSnode* actualType(MkSnode* root) {
 	if (!lChild && !rChild) return nullptr;
 
 	if (root->content == "=") {
-		root-> actualType = rChild->actualType;
+		root-> actualType = lChild->actualType;
 		return root;
 	}
 	if (rChild-> actualType == FLOATING || lChild-> actualType == FLOATING) {
@@ -536,7 +536,7 @@ void doOp(MkSnode* root) {
 		}
 		lookupTable[lhs.ident] = entry;
 		cout << "assign " << lhs.ident << endl;
-
+		ASM.push(rhs);
 		if (root-> computedType == FLOATING && root-> actualType == INTEGER) {itof();}
 		if (root-> computedType == INTEGER && root-> actualType == FLOATING) {ftoi();}
 	}
