@@ -1,12 +1,9 @@
 #include <iostream>
-#include <stdio.h>
 #include <utility>
 #include <string>
 #include <fstream>
 #include <unordered_map>
-#include <vector>
 #include <cstring>
-#include <cctype>
 
 
 using namespace std;
@@ -69,6 +66,34 @@ struct ASMStack {
 		idx = 0;
 	}
 };
+
+struct AssignStack{
+	private:
+		MkSnode* data[100] ={};
+		int topIdx = 0;
+
+	public:
+		void push(MkSnode* n) {
+			data[topIdx++] = n;
+		}
+
+		MkSnode* pop() {
+			return data[--topIdx];
+		}
+
+		bool empty() const {
+			return topIdx == 0;
+		}
+
+		int size() const {
+			return topIdx;
+		}
+
+		void clear() {
+			topIdx = 0;
+		}
+};
+
 auto ASM =  ASMStack();
 
 /* Global declarations */
@@ -662,7 +687,7 @@ void search(MkSnode* root) {
 }
 
 MkSnode* assign_list() {
-	vector<MkSnode*> chain;
+	AssignStack chain;
 
 	if (nextToken != IDENT) {
 		error();
@@ -699,7 +724,7 @@ MkSnode* assign_list() {
 		}
 
 		// We have "IDENT =": commit this name to assignment chain
-		chain.push_back(new MkSnode(identifier, name, nullptr, nullptr));
+		chain.push(new MkSnode(identifier, name, nullptr, nullptr));
 
 		// Consume '=' and continue; after this lex(), we're at the first token of RHS (or next LHS in chain)
 		lex();
@@ -711,7 +736,7 @@ MkSnode* assign_list() {
 
 	// Build the '=’ chain right-associatively: a = b = expr → a = (b = expr)
 	for (int i = static_cast<int>(chain.size()) - 1; i >= 0; --i) {
-		rhs = new MkSnode(op, "=", chain[i], rhs);
+		rhs = new MkSnode(op, "=", chain.pop(), rhs);
 	}
 
 	MkSnode* typed = actualType(rhs);
