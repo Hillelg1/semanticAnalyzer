@@ -557,80 +557,88 @@ void ilcg(MkSnode* root) {
 	}
 }
 
+// seperate the logic of handling +-/*= into one function for better reading and maintainability
 void doOp(MkSnode* root) {
-	if (root-> content == "+") {
-		if (root-> actualType == FLOATING) {
-			fadd();
-			if (root-> computedType == INTEGER) {
-				ftoi();
+	switch (root->content[0]) {
+		case '+':
+			//add our nodes and convert based on type
+			if (root->actualType == FLOATING) {
+				fadd();
+				if (root->computedType == INTEGER) ftoi();
 			}
-		}
-		if (root-> actualType == INTEGER) {
-			iadd();
-			if (root-> computedType == FLOATING) {
-				itof();
+			else { // INTEGER
+				iadd();
+				if (root->computedType == FLOATING) itof();
 			}
-		}
-	}
-	else if (root-> content == "-") {
-		if (root-> actualType == FLOATING) {
-			fsub();
-			if (root-> computedType == INTEGER) {
-				ftoi();
+			break;
+
+		case '-':
+			//subtract our nodes and convert based on type
+			if (root->actualType == FLOATING) {
+				fsub();
+				if (root->computedType == INTEGER) ftoi();
 			}
-		}
-		if (root-> actualType == INTEGER) {
-			isub();
-			if (root-> computedType == FLOATING) {
-				itof();
+			else { // INTEGER
+				isub();
+				if (root->computedType == FLOATING) itof();
 			}
-		}
-	}
-	else if (root-> content == "*") {
-		if (root-> actualType == FLOATING) {
-			fmult();
-			if (root-> computedType == INTEGER) {
-				ftoi();
+			break;
+
+		case '*':
+			//multiply our nodes and convert based on type
+			if (root->actualType == FLOATING) {
+				fmult();
+				if (root->computedType == INTEGER) ftoi();
 			}
-		}
-		if (root-> actualType == INTEGER) {
-			imult();
-			if (root-> computedType == FLOATING) {
-				itof();
+			else { // INTEGER
+				imult();
+				if (root->computedType == FLOATING) itof();
 			}
-		}
-	}
-	else if (root-> content == "/") {
-		if (root-> actualType == FLOATING) {
-			fdiv();
-			if (root-> computedType == INTEGER) {
-				ftoi();
+			break;
+
+		case '/':
+			//divide our nodes and convert based on type
+			if (root->actualType == FLOATING) {
+				fdiv();
+				if (root->computedType == INTEGER) ftoi();
 			}
-		}
-		if (root-> actualType == INTEGER) {
-			idiv();
-			if (root-> computedType == FLOATING) {
-				itof();
+			else { // INTEGER
+				idiv();
+				if (root->computedType == FLOATING) itof();
 			}
+			break;
+
+		case '=': {
+			//case of = we need to do an assign operation
+			const StackEntry rhs = ASM.top(); ASM.pop();
+			const StackEntry lhs = ASM.top(); ASM.pop();
+
+			//get row from loopup table
+			TableEntry entry = lookupTable[lhs.ident];
+
+			//assign value of rhs to the value column of our row
+			if (entry.type == FLOATING) {
+				entry.value.f_val = rhs.f_val;
+			} else {
+				entry.value.i_val = rhs.i_val;
+			}
+			//refresh the row
+			lookupTable[lhs.ident] = entry;
+			cout << "assign " << lhs.ident << endl;
+			//push the rhs back onto the stack for cases of chained =
+			ASM.push(rhs);
+			//convert if needed
+			if (root->computedType == FLOATING && root->actualType == INTEGER) itof();
+			if (root->computedType == INTEGER && root->actualType == FLOATING) ftoi();
+			break;
 		}
-	}
-	else if (root-> content == "=") {
-		StackEntry rhs = ASM.top();ASM.pop();
-		StackEntry lhs = ASM.top();ASM.pop();
-		TableEntry entry = lookupTable[lhs.ident];
-		if (entry.type == FLOATING) {
-			entry.value.f_val = rhs.f_val;
-		}
-		else {
-			entry.value.i_val = rhs.i_val;
-		}
-		lookupTable[lhs.ident] = entry;
-		cout << "assign " << lhs.ident << endl;
-		ASM.push(rhs);
-		if (root-> computedType == FLOATING && root-> actualType == INTEGER) {itof();}
-		if (root-> computedType == INTEGER && root-> actualType == FLOATING) {ftoi();}
+		default:
+			// no-op
+			break;
 	}
 }
+
+//convertion float to int
 void ftoi() {
 	cout << "fToi"<<endl;
 	StackEntry newEntry = StackEntry();
@@ -640,6 +648,7 @@ void ftoi() {
 	ASM.push(newEntry);
 }
 
+//convertion int to float
 void itof() {
 	cout << "iTof"<<endl;
 	StackEntry newEntry = StackEntry();
@@ -648,7 +657,7 @@ void itof() {
 	newEntry.f_val = static_cast<float> (oldEntry.i_val);
 	ASM.push(newEntry);
 }
-
+//add floats
 void fadd() {
 	cout<< "fadd"<<endl;
 	StackEntry newEntry = StackEntry();
@@ -659,7 +668,7 @@ void fadd() {
 	newEntry.f_val = var1.f_val + var2.f_val;
 	ASM.push(newEntry);
 }
-
+//add ints
 void iadd() {
 	cout << "iadd"<<endl;
 	StackEntry newEntry = StackEntry();
@@ -670,7 +679,7 @@ void iadd() {
 	newEntry.i_val = var2.i_val + var1.i_val;
 	ASM.push(newEntry);
 }
-
+//multiply ints
 void imult() {
 	cout << "imult"<<endl;
 	StackEntry newEntry = StackEntry();
@@ -681,7 +690,7 @@ void imult() {
 	newEntry.i_val = var2.i_val * var1.i_val;
 	ASM.push(newEntry);
 }
-
+//multiple floats
 void fmult() {
 	cout << "fmult"<<endl;
 	StackEntry newEntry = StackEntry();
@@ -692,7 +701,7 @@ void fmult() {
 	newEntry.f_val = var2.f_val * var1.f_val;
 	ASM.push(newEntry);
 }
-
+//divide ints
 void idiv() {
 	cout << "idiv"<<endl;
 	StackEntry newEntry = StackEntry();
@@ -703,7 +712,7 @@ void idiv() {
 	newEntry.i_val = var2.i_val / var1.i_val;
 	ASM.push(newEntry);
 }
-
+//divide floats
 void fdiv() {
 	cout << "fdiv"<<endl;
 	StackEntry newEntry = StackEntry();
@@ -714,7 +723,7 @@ void fdiv() {
 	newEntry.f_val = var2.f_val / var1.f_val;
 	ASM.push(newEntry);
 }
-
+//subtract ints
 void isub() {
 	cout << "isub"<<endl;
 	StackEntry newEntry = StackEntry();
@@ -725,7 +734,7 @@ void isub() {
 	newEntry.i_val = var2.i_val - var1.i_val;
 	ASM.push(newEntry);
 }
-
+//subtract floats
 void fsub() {
 	cout << "fsub"<<endl;
 	StackEntry newEntry = StackEntry();
@@ -737,14 +746,18 @@ void fsub() {
 	ASM.push(newEntry);
 }
 
-void search(MkSnode* root) {
+//not needed was for debugging
+/*void search(MkSnode* root) {
 	if (!root) return;
 	search(root->left_child);
 	cout<<root->content<< "COMPUTED: " <<root-> computedType<<" ACTUAL: " << root-> actualType<<endl;
 	search(root->right_child);
-}
+}*/
 
+//<assign_list> -> <ident> = {ident =} expr()
 MkSnode* assign_list() {
+	//this is for chaining all of our = together, theres no parsing to run on them
+	//we just need to create the children ordering from them
 	AssignStack chain;
 
 	if (nextToken != IDENT) {
@@ -756,7 +769,7 @@ MkSnode* assign_list() {
 	while (true) {
 		if (nextToken != IDENT) break;
 
-		// Save the full lexer state so we can roll back safely
+		// Save the full lexer state so we can roll back safely whe we have an expr instead of ident = again
 		string savedLexeme = lexeme;
 		int    savedToken  = nextToken;
 		int    savedIdx    = idx;
@@ -767,7 +780,7 @@ MkSnode* assign_list() {
 		// Candidate LHS identifier
 		string name = lexeme;
 
-		// Look ahead *one* token
+		// Look ahead one token
 		lex();  // try to move past the ident
 
 		if (nextToken != ASSIGNOP) {
@@ -857,6 +870,7 @@ MkSnode* factor() {
 		const int tempToken = nextToken;
 		const string tempStr = lexeme;
 		lex();
+		//make our leaf nodes based on the content of lexeme and next token
 		return tempToken == IDENT ? new MkSnode(identifier, tempStr, nullptr, nullptr) : tempToken == INTLIT ? new MkSnode(int_const, tempStr, nullptr, nullptr) : new MkSnode(float_const,tempStr,nullptr,nullptr);
 	}
 		/* Get the next token */
@@ -891,16 +905,28 @@ MkSnode* error() {
 	return nullptr;
 }
 
+//print out the table
 void print(const unordered_map<string, TableEntry>& table) {
+	cout << "\n===== SYMBOL TABLE =====\n";
+
 	for (const auto& pair : table) {
-		TableEntry entry = pair.second;
 		string key = pair.first;
+		TableEntry entry = pair.second;
 		if (key == "float" || key == "int") continue;
+
+		cout << "name: " << key
+			 << " | is_ident: " << entry.is_identifier
+			 << " | value: ";
+
 		if (entry.type == INTEGER) {
-			cout<<"is_ident: "<< entry.is_identifier<<" name: "<<key << " value: "<<entry.value.i_val <<" type: INTEGER" << endl;
+			cout << entry.value.i_val << " | type: INTEGER";
 		}
 		else {
-			cout<<"is_ident: "<< entry.is_identifier<<" name: "<<key << " value: "<<entry.value.f_val <<" type: FLOAT" << endl;
+			cout << entry.value.f_val << " | type: FLOAT";
 		}
+
+		cout << endl;
 	}
+
+	cout << "========================\n\n";
 }
