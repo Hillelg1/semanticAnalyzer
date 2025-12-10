@@ -65,6 +65,9 @@ struct ASMStack {
 	StackEntry top() {
 		return data[idx-1];
 	}
+	void clear() {
+		idx = 0;
+	}
 };
 auto ASM =  ASMStack();
 
@@ -132,9 +135,10 @@ void doOp(MkSnode* root);
 /******************************************************/
 
 int main() {
-	string testCases[1] = {"front.in1"};
+	string testCases[2] = {"front.in1","front.in2"};
 
 	for (const auto& test: testCases) {
+		cout<< "ENTERING TESTCASE: "<< test << endl;
 		TableEntry intEntry;
 		TableEntry floatEntry;
 		floatEntry.is_identifier = false;
@@ -151,6 +155,7 @@ int main() {
 		else {
 			program(infile);
 		}
+		ASM.clear();
 		lookupTable.clear();
 	}
 }
@@ -313,11 +318,13 @@ void program(ifstream &infile) {
 		lex();
 		if (nextToken == INT){declare_list(true);}
 		else if (nextToken == FLOAT){declare_list(false);}
-		else if (nextToken == IDENT){assign_list();}
+		else if (nextToken == IDENT) {
+			assign_list();
+		}
 		else error();
 	}
 }
-void declare_list(bool isInt) {
+void declare_list(const bool isInt) {
 	if (nextToken != INT && nextToken != FLOAT) {
 		error();
 		nextToken = EOF;
@@ -336,14 +343,13 @@ TableEntry declare(const bool isInt) {
 	if (nextToken != IDENT) {
 		return {};
 	}
-	TableEntry ret = TableEntry();
+	auto ret = TableEntry();
 	ret.is_identifier = true;
 	ret.name = lexeme;
 	ret.type = isInt ? INTEGER : FLOATING;
 
 	if (isInt) ret.value.i_val = 0;
 	else ret.value.f_val = 0.0;
-
 	lex(); // consume ident
 
 	if (nextToken != ASSIGNOP) {
@@ -657,38 +663,66 @@ void search(MkSnode* root) {
 
 MkSnode* assign_list() {
 	vector<MkSnode*> chain;
+
 	if (nextToken != IDENT) {
 		error();
 		nextToken = EOF;
 		return nullptr;
 	}
-	while (nextToken == IDENT) {
-		string temp = lexeme;
-		lex();
+
+	while (true) {
+		if (nextToken != IDENT) break;
+
+		// Save the full lexer state so we can roll back safely
+		string savedLexeme = lexeme;
+		int    savedToken  = nextToken;
+		int    savedIdx    = idx;
+		int    savedClass  = charClass;
+		char   savedChar   = nextChar;
+		int    savedLexLen = lexLen;
+
+		// Candidate LHS identifier
+		string name = lexeme;
+
+		// Look ahead *one* token
+		lex();  // try to move past the ident
+
 		if (nextToken != ASSIGNOP) {
-			error();
-			nextToken = EOF;
-			return nullptr;
+			// Not actually "IDENT =": restore state and stop chaining.
+			idx       = savedIdx;
+			charClass = savedClass;
+			nextChar  = savedChar;
+			nextToken = savedToken;
+			strcpy(lexeme, savedLexeme.c_str());
+			lexLen    = savedLexLen;
+			break;  // RHS starts with this IDENT
 		}
+
+		// We have "IDENT =": commit this name to assignment chain
+		chain.push_back(new MkSnode(identifier, name, nullptr, nullptr));
+
+		// Consume '=' and continue; after this lex(), we're at the first token of RHS (or next LHS in chain)
 		lex();
-		chain.push_back(new MkSnode(identifier, temp,nullptr ,nullptr ));
 	}
+
+	// Parse the RHS expression starting from the current token
 	MkSnode* rhs = expr();
-	if (rhs == nullptr) {return nullptr;}
-	for (int i=chain.size()-1; i>=0; i--) {
-		rhs = new  MkSnode(op,"=", chain[i],rhs);
+	if (!rhs) return nullptr;
+
+	// Build the '=’ chain right-associatively: a = b = expr → a = (b = expr)
+	for (int i = static_cast<int>(chain.size()) - 1; i >= 0; --i) {
+		rhs = new MkSnode(op, "=", chain[i], rhs);
 	}
-	MkSnode* actualTypedTree = actualType(rhs);
-	computedTypes(actualTypedTree);
-	actualTypedTree->computedType = actualTypedTree->actualType;
-	search(actualTypedTree);
-	ilcg(actualTypedTree);
+
+	MkSnode* typed = actualType(rhs);
+	computedTypes(typed);
+	typed->computedType = typed->actualType;
+
+	ilcg(typed);
 	print(lookupTable);
-	return actualTypedTree;
+
+	return typed;
 }
-
-
-
 
 /* expr
 */
@@ -737,8 +771,8 @@ constant | ( <expr )
 MkSnode* factor() {
 	/* Determine which RHS */
 	if (nextToken == IDENT || nextToken == INTLIT|| nextToken == FLOATLIT) {
-		int tempToken = nextToken;
-		string tempStr = lexeme;
+		const int tempToken = nextToken;
+		const string tempStr = lexeme;
 		lex();
 		return tempToken == IDENT ? new MkSnode(identifier, tempStr, nullptr, nullptr) : tempToken == INTLIT ? new MkSnode(int_const, tempStr, nullptr, nullptr) : new MkSnode(float_const,tempStr,nullptr,nullptr);
 	}
