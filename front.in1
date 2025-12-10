@@ -1,3 +1,3 @@
-float x
-int k = 10,i = 4,j
-k = (i+j)*x
+int i=1, j=8, k
+float y,x=10.5
+y=k=(i+j)/(x-6.8)

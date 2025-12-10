@@ -20,6 +20,7 @@ enum Label {
 };
 
 enum EntryType {TYPE_UNSET = -1,INTEGER = 0,FLOATING = 1};
+
 struct TableEntry {
 	bool is_identifier;
 	EntryType type;
@@ -37,9 +38,35 @@ struct MkSnode {
 	string content;
 	MkSnode* left_child;
 	MkSnode* right_child;
+	bool is_lhs;
 	MkSnode(const Label lb, string cn, MkSnode* left, MkSnode* right)
-		: label(lb), content(std::move(cn)), actualType(TYPE_UNSET), computedType(TYPE_UNSET), left_child(left), right_child(right) {}
+		: label(lb), content(std::move(cn)), actualType(TYPE_UNSET), computedType(TYPE_UNSET), left_child(left), right_child(right), is_lhs(false) {}
 };
+
+struct StackEntry {
+	union {
+		int i_val;
+		float f_val;
+	};
+	string ident;
+};
+
+struct ASMStack {
+	private:
+		StackEntry data[100] = {};
+		int idx = 0;
+	public:
+	void push(StackEntry entry) {
+		data[idx++] = std::move(entry);
+	}
+	void pop() {
+		idx--;
+	}
+	StackEntry top() {
+		return data[idx-1];
+	}
+};
+auto ASM =  ASMStack();
 
 /* Global declarations */
 /* Variables */
@@ -61,7 +88,7 @@ void getChar();
 void getNonBlank();
 int lex();
 void program(ifstream &infile);
-void print(unordered_map<string, TableEntry> table);
+void print(const unordered_map<string, TableEntry>& table);
 MkSnode* assign_list();
 void declare_list(bool isInt);
 TableEntry declare(bool isInt);
@@ -70,6 +97,18 @@ MkSnode* term();
 MkSnode* expr();
 MkSnode* factor();
 MkSnode* error();
+
+void ftoi();
+void itof();
+void iadd();
+void fadd();
+void fmult();
+void imult();
+void fdiv();
+void idiv();
+void isub();
+void fsub();
+void doOp(MkSnode* root);
 /* Character classes */
 #define LETTER 0
 #define DIGIT 1
@@ -111,7 +150,6 @@ int main() {
 		}
 		else {
 			program(infile);
-			print(lookupTable);
 		}
 		lookupTable.clear();
 	}
@@ -295,7 +333,6 @@ void declare_list(bool isInt) {
 }
 
 TableEntry declare(bool isInt) {
-	int tmpToken = nextToken;
 	if (nextToken != IDENT)return {};
 	TableEntry ret = TableEntry();
 	ret.is_identifier = true;
@@ -362,6 +399,7 @@ void computedTypes(MkSnode* root) {
 	}
 	if (root-> content == "=" && root->left_child && root->right_child) {
 		root-> right_child-> computedType = root->left_child->actualType;
+		root->left_child -> is_lhs = true;
 	}
 	else {
 		if (root-> right_child)root->right_child->computedType = root->actualType;
@@ -369,6 +407,242 @@ void computedTypes(MkSnode* root) {
 	}
 	computedTypes(root->left_child);
 	computedTypes(root->right_child);
+}
+
+void ilcg(MkSnode* root) {
+	if (!root) return;
+	ilcg(root->left_child);
+	ilcg(root->right_child);
+	StackEntry entry = StackEntry();
+	if (root-> is_lhs) {
+		entry.ident = root-> content;
+		ASM.push(entry);
+		cout <<"pushaddr("<<root->content<<")"<<endl;
+		return;
+	}
+	if (root-> label == identifier) {
+		TableEntry tableEntry = lookupTable[root->content];
+		if (root-> actualType == INTEGER) {
+			int num = tableEntry.value.i_val;
+			entry.i_val = num;
+			ASM.push(entry);
+			cout << "push("<<root->content<<")" << endl;
+			if (root-> computedType == FLOATING) {
+				itof();
+			}
+			return;
+		}
+		if (root-> actualType == FLOATING) {
+			float num = tableEntry.value.f_val;
+			entry.f_val = num;
+			ASM.push(entry);
+			cout << "push("<<root->content<<")" << endl;
+			if (root-> computedType == INTEGER) {
+				ftoi();
+			}
+		}
+		return;
+	}
+	if (root-> label == float_const) {
+		const float fnum = stof(root->content);
+		cout << "push("<<fnum<<")" << endl;
+		entry.f_val = fnum;
+		ASM.push(entry);
+		return;
+	}
+	if (root-> label == int_const) {
+		const int inum = stoi(root->content);
+		cout << "push("<<inum<<")" << endl;
+		entry.i_val = inum;
+		ASM.push(entry);
+		return;
+	}
+	if (root-> label == op) {
+		doOp(root);
+	}
+
+
+}
+
+void doOp(MkSnode* root) {
+	if (root-> content == "+") {
+		if (root-> actualType == FLOATING) {
+			fadd();
+			if (root-> computedType == INTEGER) {
+				ftoi();
+			}
+		}
+		if (root-> actualType == INTEGER) {
+			iadd();
+			if (root-> computedType == FLOATING) {
+				itof();
+			}
+		}
+	}
+	else if (root-> content == "-") {
+		if (root-> actualType == FLOATING) {
+			fsub();
+			if (root-> computedType == INTEGER) {
+				ftoi();
+			}
+		}
+		if (root-> actualType == INTEGER) {
+			isub();
+			if (root-> computedType == FLOATING) {
+				itof();
+			}
+		}
+	}
+	else if (root-> content == "*") {
+		if (root-> actualType == FLOATING) {
+			fmult();
+			if (root-> computedType == INTEGER) {
+				ftoi();
+			}
+		}
+		if (root-> actualType == INTEGER) {
+			imult();
+			if (root-> computedType == FLOATING) {
+				itof();
+			}
+		}
+	}
+	else if (root-> content == "/") {
+		if (root-> actualType == FLOATING) {
+			fdiv();
+			if (root-> computedType == INTEGER) {
+				ftoi();
+			}
+		}
+		if (root-> actualType == INTEGER) {
+			idiv();
+			if (root-> computedType == FLOATING) {
+				itof();
+			}
+		}
+	}
+	else if (root-> content == "=") {
+		StackEntry rhs = ASM.top();ASM.pop();
+		StackEntry lhs = ASM.top();ASM.pop();
+		TableEntry entry = lookupTable[lhs.ident];
+		if (entry.type == FLOATING) {
+			entry.value.f_val = rhs.f_val;
+		}
+		else {
+			entry.value.i_val = rhs.i_val;
+		}
+		lookupTable[lhs.ident] = entry;
+		cout << "assign " << lhs.ident << endl;
+
+		if (root-> computedType == FLOATING && root-> actualType == INTEGER) {itof();}
+		if (root-> computedType == INTEGER && root-> actualType == FLOATING) {ftoi();}
+	}
+
+}
+void ftoi() {
+	cout << "fToi"<<endl;
+	StackEntry newEntry = StackEntry();
+	const StackEntry oldEntry = ASM.top();
+	ASM.pop();
+	newEntry.i_val = static_cast<int> (oldEntry.f_val);
+	ASM.push(newEntry);
+}
+
+void itof() {
+	cout << "iTof"<<endl;
+	StackEntry newEntry = StackEntry();
+	const StackEntry oldEntry = ASM.top();
+	ASM.pop();
+	newEntry.f_val = static_cast<float> (oldEntry.i_val);
+	ASM.push(newEntry);
+}
+
+void fadd() {
+	cout<< "fadd"<<endl;
+	StackEntry newEntry = StackEntry();
+	const StackEntry var1 = ASM.top();
+	ASM.pop();
+	const StackEntry var2 = ASM.top();
+	ASM.pop();
+	newEntry.f_val = var1.f_val + var2.f_val;
+	ASM.push(newEntry);
+}
+
+void iadd() {
+	cout << "iadd"<<endl;
+	StackEntry newEntry = StackEntry();
+	const StackEntry var1 = ASM.top();
+	ASM.pop();
+	const StackEntry var2 = ASM.top();
+	ASM.pop();
+	newEntry.i_val = var2.i_val + var1.i_val;
+	ASM.push(newEntry);
+}
+
+void imult() {
+	cout << "imult"<<endl;
+	StackEntry newEntry = StackEntry();
+	const StackEntry var1 = ASM.top();
+	ASM.pop();
+	const StackEntry var2 = ASM.top();
+	ASM.pop();
+	newEntry.i_val = var2.i_val * var1.i_val;
+	ASM.push(newEntry);
+}
+
+void fmult() {
+	cout << "fmult"<<endl;
+	StackEntry newEntry = StackEntry();
+	const StackEntry var1 = ASM.top();
+	ASM.pop();
+	const StackEntry var2 = ASM.top();
+	ASM.pop();
+	newEntry.f_val = var2.f_val * var1.f_val;
+	ASM.push(newEntry);
+}
+
+void idiv() {
+	cout << "idiv"<<endl;
+	StackEntry newEntry = StackEntry();
+	const StackEntry var1 = ASM.top();
+	ASM.pop();
+	const StackEntry var2 = ASM.top();
+	ASM.pop();
+	newEntry.i_val = var2.i_val / var1.i_val;
+	ASM.push(newEntry);
+}
+
+void fdiv() {
+	cout << "fdiv"<<endl;
+	StackEntry newEntry = StackEntry();
+	const StackEntry var1 = ASM.top();
+	ASM.pop();
+	const StackEntry var2 = ASM.top();
+	ASM.pop();
+	newEntry.f_val = var2.f_val / var1.f_val;
+	ASM.push(newEntry);
+}
+
+void isub() {
+	cout << "isub"<<endl;
+	StackEntry newEntry = StackEntry();
+	const StackEntry var1 = ASM.top();
+	ASM.pop();
+	const StackEntry var2 = ASM.top();
+	ASM.pop();
+	newEntry.i_val = var2.i_val - var1.i_val;
+	ASM.push(newEntry);
+}
+
+void fsub() {
+	cout << "fsub"<<endl;
+	StackEntry newEntry = StackEntry();
+	const StackEntry var1 = ASM.top();
+	ASM.pop();
+	const StackEntry var2 = ASM.top();
+	ASM.pop();
+	newEntry.f_val = var2.f_val - var1.f_val;
+	ASM.push(newEntry);
 }
 
 void search(MkSnode* root) {
@@ -403,35 +677,16 @@ MkSnode* assign_list() {
 	}
 	MkSnode* actualTypedTree = actualType(rhs);
 	computedTypes(actualTypedTree);
+	actualTypedTree->computedType = actualTypedTree->actualType;
 	search(actualTypedTree);
+	ilcg(actualTypedTree);
+	print(lookupTable);
 	return actualTypedTree;
 }
 
 
 
-MkSnode* assign() {
-	if (nextToken != IDENT) {
-		error();
-		nextToken = EOF;
-		return nullptr;
-	}
-	string temp = lexeme;
-	MkSnode* ident = new MkSnode(identifier, lexeme, nullptr, nullptr);
-	lex();
-	if (nextToken != ASSIGNOP) {
-		error();
-		nextToken = EOF;
-		return nullptr;
-	}
 
-	MkSnode* e = expr();
-	if (e==nullptr) {
-		error();
-		nextToken = EOF;
-		return nullptr;
-	}
-	return new MkSnode(op, "=", ident, e);
-}
 /* expr
 */
 MkSnode* expr() {
@@ -516,6 +771,16 @@ MkSnode* error() {
 	return nullptr;
 }
 
-void print(unordered_map<string, TableEntry> table) {
-
+void print(const unordered_map<string, TableEntry>& table) {
+	for (const auto& pair : table) {
+		TableEntry entry = pair.second;
+		string key = pair.first;
+		if (key == "float" || key == "int") continue;
+		if (entry.type == INTEGER) {
+			cout<< entry.is_identifier<<key << entry.value.i_val << entry.type << endl;
+		}
+		else {
+			cout<< entry.is_identifier<<entry.name << entry.value.f_val << entry.type<<endl;
+		}
+	}
 }
