@@ -326,14 +326,16 @@ void declare_list(bool isInt) {
 	TableEntry ret = declare(isInt);
 	lookupTable[ret.name] = ret;
 	while (nextToken == COMMA) {
+		lex(); // consume ,
 		TableEntry next = declare(isInt);
 		lookupTable[next.name] = next;
-		lex();
 	}
 }
 
-TableEntry declare(bool isInt) {
-	if (nextToken != IDENT)return {};
+TableEntry declare(const bool isInt) {
+	if (nextToken != IDENT) {
+		return {};
+	}
 	TableEntry ret = TableEntry();
 	ret.is_identifier = true;
 	ret.name = lexeme;
@@ -342,19 +344,20 @@ TableEntry declare(bool isInt) {
 	if (isInt) ret.value.i_val = 0;
 	else ret.value.f_val = 0.0;
 
-	lex();
+	lex(); // consume ident
 
 	if (nextToken != ASSIGNOP) {
-		return ret;
+		return ret; //just ident,
 	}
-	lex();
-	if (!(nextToken == INTLIT || nextToken == FLOATLIT)) {return ret;}
+	lex(); // consume =
+
 	if (isInt) {
 		ret.value.i_val = nextToken == INTLIT? stoi(lexeme) : static_cast<int> (stof(lexeme));
 	}
 	else {
 		ret.value.f_val = nextToken == FLOATLIT? stof(lexeme) : static_cast<float> (stoi(lexeme));
 	}
+	lex();//consume const
 	return ret;
 }
 
@@ -777,10 +780,10 @@ void print(const unordered_map<string, TableEntry>& table) {
 		string key = pair.first;
 		if (key == "float" || key == "int") continue;
 		if (entry.type == INTEGER) {
-			cout<< entry.is_identifier<<key << entry.value.i_val << entry.type << endl;
+			cout<<"is_ident: "<< entry.is_identifier<<" name: "<<key << " value: "<<entry.value.i_val <<" type: INTEGER" << endl;
 		}
 		else {
-			cout<< entry.is_identifier<<entry.name << entry.value.f_val << entry.type<<endl;
+			cout<<"is_ident: "<< entry.is_identifier<<" name: "<<key << " value: "<<entry.value.f_val <<" type: FLOAT" << endl;
 		}
 	}
 }
